@@ -399,7 +399,8 @@ if st.button(
           use_container_width=True,
       )
 
-    st.balloons()
+    # 替换为雪花特效
+    st.snow()
 
 # ================= 8. 底部版权与开发者声明 =================
 st.markdown("---")
