@@ -2,19 +2,20 @@ import datetime
 import io
 import os
 import re
-import urllib.request
 import zipfile
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfgen import canvas
+from docx import Document
+from docx.oxml.ns import qn
+from docx.shared import Inches, RGBColor, Pt
+import pandas as pd
+import qrcode
+from PIL import Image
 import requests
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 
 # ================= 1. 页面配置与初始化 =================
 st.set_page_config(
-    page_title="员工职业健康体检报告签收平台",
+    page_title="员工职业健康体检报告在线查阅与签收平台",
     layout="centered",
     initial_sidebar_state="expanded",
 )
@@ -38,14 +39,12 @@ def find_employee_pdf_report(folder, id_card, name):
   if not os.path.exists(folder):
     return None, None
   for filename in os.listdir(folder):
-    # 优先匹配 身份证号 和 姓名
     if (
         id_card in filename
         and name in filename
         and filename.lower().endswith(".pdf")
     ):
       return os.path.join(folder, filename), filename
-  # 其次仅通过身份证号匹配
   for filename in os.listdir(folder):
     if id_card in filename and filename.lower().endswith(".pdf"):
       return os.path.join(folder, filename), filename
@@ -122,10 +121,6 @@ with st.sidebar:
   )
 
   if app_url:
-    import io
-    import qrcode
-    from PIL import Image
-
     qr = qrcode.make(app_url)
     img_buffer = io.BytesIO()
     qr.save(img_buffer, format="PNG")
@@ -139,10 +134,10 @@ with st.sidebar:
   st.markdown("---")
   st.markdown("### 📂 管理员提示")
   st.write(
-      "请将员工体检报告 PDF 文件放入 GitHub 仓库的 **体检报告/** 文件夹中。"
+      "请将员工体检报告 **PDF 原件**放入 GitHub 仓库的 **体检报告/** 文件夹中。"
   )
 
-# ================= 4. 主界面逻辑 =================
+# ================= 4. 主界面逻辑（Logo在左侧，主标题单独一行） =================
 col_logo, col_title = st.columns([1, 6])
 with col_logo:
   try:
@@ -245,85 +240,61 @@ with col_date:
   )
 
 
-# ================= 6. 辅助函数：自动下载中文字体并生成 PDF 签收凭证 =================
-def get_chinese_font():
-  font_path = "NotoSansSC-Regular.ttf"
-  if not os.path.exists(font_path):
-    try:
-      url = "https://github.com/google/fonts/raw/main/ofl/notosanssc/NotoSansSC-Regular.ttf"
-      urllib.request.urlretrieve(url, font_path)
-    except Exception:
-      pass
-  if os.path.exists(font_path):
-    try:
-      pdfmetrics.registerFont(TTFont("ChineseFont", font_path))
-      return "ChineseFont"
-    except Exception:
-      pass
-  return "Helvetica"
-
-
-def generate_medical_receipt_pdf(
+# ================= 6. 辅助函数：生成 Word 格式的体检签收确认凭证 =================
+def generate_medical_receipt_docx(
     employee_name, employee_id, report_name, sig_image_io, date_image_io
 ):
-  pdf_buffer = io.BytesIO()
-  c = canvas.Canvas(pdf_buffer, pagesize=A4)
-  width, height = A4
-  font_name = get_chinese_font()
+  doc = Document()
 
-  # 标题
-  c.setFont(font_name, 16)
-  c.drawString(
-      50, height - 50, "【职业健康体检报告签收确认凭证】"
-  )
+  p_title = doc.add_paragraph()
+  run_t = p_title.add_run("【职业健康体检报告签收确认凭证】")
+  run_t.font.name = "华文宋体"
+  run_t.font.size = Pt(16)
+  run_t.bold = True
+  run_t.font.element.rPr.rFonts.set(qn("w:eastAsia"), "华文宋体")
 
-  c.setFont(font_name, 11)
-  c.drawString(
-      50,
-      height - 80,
+  p_info = doc.add_paragraph()
+  run_i = p_info.add_run(
       f"员工姓名: {employee_name}    身份证号: {employee_id}    签收时间:"
-      f" {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+      f" {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+      f"关联体检报告文件: {report_name}\n"
+      "本人已收到并查阅本人的职业健康体检报告，已知悉体检结论及各项健康指标与职业禁忌要求。"
   )
-  c.drawString(
-      50,
-      height - 105,
-      f"关联体检报告文件: {report_name}",
+  run_i.font.name = "华文宋体"
+  run_i.font.size = Pt(11)
+  run_i.font.element.rPr.rFonts.set(qn("w:eastAsia"), "华文宋体")
+
+  p_line = doc.add_paragraph(
+      "--------------------------------------------------"
   )
-  c.drawString(
-      50,
-      height - 130,
-      "本人已收到并查阅本人的职业健康体检报告，已知悉体检结论及各项健康指标与职业禁忌要求。",
-  )
+  p_line.paragraph_format.space_before = Pt(5)
+  p_line.paragraph_format.space_after = Pt(10)
 
-  c.setLineWidth(1)
-  c.line(50, height - 145, width - 50, height - 145)
+  table = doc.add_table(rows=1, cols=2)
+  table.autofit = False
 
-  # 临时保存图像供 reportlab 读取
-  sig_path = "temp_sig.png"
-  with open(sig_path, "wb") as f:
-    f.write(sig_image_io.getvalue())
+  cell_sig = table.cell(0, 0)
+  p1 = cell_sig.paragraphs[0]
+  r1 = p1.add_run("员工手写亲笔签名：\n")
+  r1.font.name = "华文宋体"
+  r1.font.size = Pt(10.5)
+  r1.font.element.rPr.rFonts.set(qn("w:eastAsia"), "华文宋体")
+  p1.add_run().add_picture(sig_image_io, width=Inches(1.8))
+  sig_image_io.seek(0)
 
-  date_path = "temp_date.png"
-  with open(date_path, "wb") as f:
-    f.write(date_image_io.getvalue())
+  cell_date = table.cell(0, 1)
+  p2 = cell_date.paragraphs[0]
+  r2 = p2.add_run("手写签署日期：\n")
+  r2.font.name = "华文宋体"
+  r2.font.size = Pt(10.5)
+  r2.font.element.rPr.rFonts.set(qn("w:eastAsia"), "华文宋体")
+  p2.add_run().add_picture(date_image_io, width=Inches(1.8))
+  date_image_io.seek(0)
 
-  # 绘制签名与日期图片标签
-  c.setFont(font_name, 11)
-  c.drawString(50, height - 180, "员工手写亲笔签名：")
-  c.drawImage(sig_path, 50, height - 350, width=180, preserveAspectRatio=True)
-
-  c.drawString(300, height - 180, "手写签署日期：")
-  c.drawImage(date_path, 300, height - 350, width=180, preserveAspectRatio=True)
-
-  c.save()
-  pdf_buffer.seek(0)
-
-  if os.path.exists(sig_path):
-    os.remove(sig_path)
-  if os.path.exists(date_path):
-    os.remove(date_path)
-
-  return pdf_buffer
+  buffer = io.BytesIO()
+  doc.save(buffer)
+  buffer.seek(0)
+  return buffer
 
 
 # ================= 7. 提交校验与生成档案 =================
@@ -342,22 +313,22 @@ if st.button(
   id_pattern = re.compile(r"^\d{17}[\dXx]$")
 
   if not emp_name.strip() or not emp_id.strip():
-    st.error("❌ 拦截：请完整填写【员工姓名】与【身份证号】！")
+    st.error("❌ 拦截 : 请完整填写【员工姓名】与【身份证号】！")
   elif not id_pattern.match(emp_id.strip()):
     st.error(
-        "❌ 拦截：身份证号必须为严格的 **18 位**数字（末尾可为大写 X）！"
+        "❌ 拦截 : 身份证号必须为严格的 **18 位**数字（末尾可为大写 X）！"
     )
   elif not matched_path:
-    st.error("❌ 拦截：未匹配到您的专属体检报告，无法完成签收！")
+    st.error("❌ 拦截 : 未匹配到您的专属体检报告，无法完成签收！")
   elif not c_report:
-    st.error("❌ 拦截：您必须勾选确认已查阅体检报告！")
+    st.error("❌ 拦截 : 您必须勾选确认已查阅体检报告！")
   elif is_canvas_empty:
-    st.warning("⚠️ 拦截：请在左侧画板完成手写签名后再提交。")
+    st.warning("⚠️ 拦截 : 请在左侧画板完成手写签名后再提交。")
   elif is_date_empty:
-    st.warning("⚠️ 拦截：请在右侧手写日期栏内完成手写日期后再提交！")
+    st.warning("⚠️ 拦截 : 请在右侧手写日期栏内完成手写日期后再提交！")
   else:
     st.success(
-        "✅ 体检报告签收成功！系统已成功生成您的专属带签名合规确认凭证。"
+        "✅ 体检报告签收成功！系统已成功生成您的专属带签名 Word 合规确认凭证。"
     )
 
     signature_img = Image.fromarray(
@@ -374,8 +345,8 @@ if st.button(
     date_img.save(date_io, format="PNG")
     date_io.seek(0)
 
-    # 生成体检签收凭证 PDF
-    receipt_pdf_buffer = generate_medical_receipt_pdf(
+    # 生成 Word 格式的体检签收凭证
+    receipt_docx_buffer = generate_medical_receipt_docx(
         emp_name, emp_id, matched_filename, sig_io, date_io
     )
 
@@ -387,13 +358,13 @@ if st.button(
         report_bytes = fr.read()
       zip_file.writestr(f"体检报告原件_{emp_name}_{matched_filename}", report_bytes)
 
-      # 2. 放入带签名的签收确认凭证 PDF
-      receipt_filename = f"体检报告签收确认凭证_{emp_name}_{emp_id[-4:]}.pdf"
-      zip_file.writestr(receipt_filename, receipt_pdf_buffer.getvalue())
+      # 2. 放入带签名的签收确认凭证 Word (.docx)
+      receipt_filename = f"体检报告签收确认凭证_{emp_name}_{emp_id[-4:]}.docx"
+      zip_file.writestr(receipt_filename, receipt_docx_buffer.getvalue())
 
       # 3. 自动同步到百度网盘
       upload_to_baidu_netdisk_with_auto_refresh(
-          receipt_pdf_buffer.getvalue(), receipt_filename
+          receipt_docx_buffer.getvalue(), receipt_filename
       )
 
       # 4. 保存签名及日期原图
@@ -417,10 +388,12 @@ if st.button(
     col_d1, col_d2 = st.columns(2)
     with col_d1:
       st.download_button(
-          label="📄 下载体检报告签收凭证 (.pdf)",
-          data=receipt_pdf_buffer.getvalue(),
-          file_name=f"体检报告签收确认凭证_{emp_name}.pdf",
-          mime="application/pdf",
+          label="📄 下载体检报告签收凭证 (.docx)",
+          data=receipt_docx_buffer.getvalue(),
+          file_name=f"体检报告签收确认凭证_{emp_name}.docx",
+          mime=(
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ),
           use_container_width=True,
       )
     with col_d2:
