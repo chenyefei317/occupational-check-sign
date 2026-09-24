@@ -34,20 +34,11 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 
-# 智能匹配员工专属 PDF 体检报告函数（支持：体检编号 + 身份证号 + 姓名）
-def find_employee_pdf_report(folder, id_card, name, report_no):
+# 智能匹配员工专属 PDF 体检报告函数（支持通过 身份证号 + 姓名 精准匹配）
+def find_employee_pdf_report(folder, id_card, name):
   if not os.path.exists(folder):
     return None, None
-  # 优先严格匹配：编号 + 身份证 + 姓名
-  for filename in os.listdir(folder):
-    if (
-        report_no in filename
-        and id_card in filename
-        and name in filename
-        and filename.lower().endswith(".pdf")
-    ):
-      return os.path.join(folder, filename), filename
-  # 其次匹配：身份证 + 姓名
+  # 优先严格匹配：包含身份证和姓名
   for filename in os.listdir(folder):
     if (
         id_card in filename
@@ -55,7 +46,7 @@ def find_employee_pdf_report(folder, id_card, name, report_no):
         and filename.lower().endswith(".pdf")
     ):
       return os.path.join(folder, filename), filename
-  # 兜底匹配：仅身份证
+  # 兜底匹配：仅匹配身份证
   for filename in os.listdir(folder):
     if id_card in filename and filename.lower().endswith(".pdf"):
       return os.path.join(folder, filename), filename
@@ -156,13 +147,13 @@ with col_title:
   st.markdown("## 员工职业健康体检报告在线查阅与签收平台")
 
 st.markdown(
-    "请先准确输入您的姓名、18位身份证号及体检编号，系统将自动检索并匹配您的专属 PDF"
+    "请先准确输入您的姓名与18位身份证号，系统将自动检索并匹配您的专属 PDF"
     " 体检报告。查阅完毕后，请在底部完成手写签名与手写日期。"
 )
 
-# 基础信息录入（扩充为三列：姓名、身份证号、体检编号）
+# 基础信息录入（双列：姓名、身份证号）
 st.subheader("1. 员工身份核验")
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 with col1:
   emp_name = st.text_input("员工姓名 (必填)：")
 with col2:
@@ -170,8 +161,6 @@ with col2:
       "身份证号 (必填，18位)：",
       help="请输入标准的 18 位中国居民身份证号码",
   )
-with col3:
-  report_no = st.text_input("体检编号 (必填)：", help="请输入体检报告编号")
 
 st.write("---")
 st.markdown("### 📄 专属体检报告 PDF 查阅")
@@ -180,9 +169,9 @@ report_folder = "体检报告"
 matched_path, matched_filename = None, None
 
 id_pattern_check = re.compile(r"^\d{17}[\dXx]$")
-if emp_name.strip() and report_no.strip() and id_pattern_check.match(emp_id.strip()):
+if emp_name.strip() and id_pattern_check.match(emp_id.strip()):
   matched_path, matched_filename = find_employee_pdf_report(
-      report_folder, emp_id.strip(), emp_name.strip(), report_no.strip()
+      report_folder, emp_id.strip(), emp_name.strip()
   )
 
 if matched_path and os.path.exists(matched_path):
@@ -198,13 +187,13 @@ if matched_path and os.path.exists(matched_path):
       use_container_width=True,
   )
 else:
-  if emp_name.strip() or emp_id.strip() or report_no.strip():
+  if emp_name.strip() or emp_id.strip():
     st.warning(
-        "⚠️ 未在后台 '体检报告' 文件夹中检索到与您输入的信息匹配的 PDF"
-        " 报告文件，请核对【姓名、身份证、体检编号】是否正确。"
+        "⚠️ 未在后台 '体检报告' 文件夹中检索到与您输入的姓名及身份证匹配的 PDF"
+        " 报告文件，请核对信息是否正确。"
     )
   else:
-    st.info("💡 请先在上方完整填写您的姓名、身份证号和体检编号以加载报告。")
+    st.info("💡 请先在上方完整填写您的姓名和身份证号以加载报告。")
 
 c_report = st.checkbox(
     "【须确认】本人已收到并查阅上述职业健康体检报告，已知悉体检结论及职业健康防护建议。"
@@ -247,9 +236,9 @@ with col_date:
   )
 
 
-# ================= 6. 辅助函数：生成 Word 格式的体检签收确认凭证（关联体检编号） =================
+# ================= 6. 辅助函数：生成 Word 格式的体检签收确认凭证（内置关联体检报告编号） =================
 def generate_medical_receipt_docx(
-    employee_name, employee_id, report_number, report_file_name, sig_image_io, date_image_io
+    employee_name, employee_id, report_file_name, sig_image_io, date_image_io
 ):
   doc = Document()
 
@@ -260,11 +249,14 @@ def generate_medical_receipt_docx(
   run_t.bold = True
   run_t.font.element.rPr.rFonts.set(qn("w:eastAsia"), "华文宋体")
 
+  # 自动提取文件名（不含扩展名）作为体检报告档案编号/关联依据
+  report_no_display = os.path.splitext(report_file_name)[0]
+
   p_info = doc.add_paragraph()
   run_i = p_info.add_run(
       f"员工姓名: {employee_name}    身份证号: {employee_id}\n"
-      f"体检报告编号: {report_number}    签收时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-      f"关联体检报告文件: {report_file_name}\n"
+      f"体检报告编号/档案名: {report_no_display}\n"
+      f"签收时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
       "本人已收到并查阅本人的职业健康体检报告，已知悉体检结论及各项健康指标与职业禁忌要求。"
   )
   run_i.font.name = "华文宋体"
@@ -319,8 +311,8 @@ if st.button(
 
   id_pattern = re.compile(r"^\d{17}[\dXx]$")
 
-  if not emp_name.strip() or not emp_id.strip() or not report_no.strip():
-    st.error("❌ 拦截 : 请完整填写【员工姓名】、【身份证号】与【体检编号】！")
+  if not emp_name.strip() or not emp_id.strip():
+    st.error("❌ 拦截 : 请完整填写【员工姓名】与【身份证号】！")
   elif not id_pattern.match(emp_id.strip()):
     st.error(
         "❌ 拦截 : 身份证号必须为严格的 **18 位**数字（末尾可为大写 X）！"
@@ -352,9 +344,9 @@ if st.button(
     date_img.save(date_io, format="PNG")
     date_io.seek(0)
 
-    # 生成 Word 格式的体检签收凭证（包含体检编号）
+    # 生成 Word 格式的体检签收凭证（内部自动关联体检报告文件名编号）
     receipt_docx_buffer = generate_medical_receipt_docx(
-        emp_name, emp_id, report_no.strip(), matched_filename, sig_io, date_io
+        emp_name, emp_id, matched_filename, sig_io, date_io
     )
 
     # 动态打包 ZIP
@@ -412,7 +404,7 @@ if st.button(
           use_container_width=True,
       )
 
-    # 保持使用雪花特效
+    # 触发雪花特效
     st.snow()
 
 # ================= 8. 底部版权与开发者声明 =================
