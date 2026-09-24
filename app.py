@@ -118,8 +118,9 @@ with st.sidebar:
   st.markdown("### 📱 微信扫码与分享")
   st.write("已自动关联您的云端网址，二维码将实时更新供手机扫码填报。")
 
+  # 更新为正确的公网链接
   app_url = st.text_input(
-      "应用公网链接 (URL)", value="https://iway--technician.streamlit.app"
+      "应用公网链接 (URL)", value="https://occupational-check-sign.streamlit.app"
   )
 
   if app_url:
@@ -236,7 +237,7 @@ with col_date:
   )
 
 
-# ================= 6. 辅助函数：生成 Word 格式的体检签收确认凭证（内置关联体检报告编号） =================
+# ================= 6. 辅助函数：生成 Word 格式的体检签收确认凭证（关联体检报告编号） =================
 def generate_medical_receipt_docx(
     employee_name, employee_id, report_file_name, sig_image_io, date_image_io
 ):
@@ -344,7 +345,7 @@ if st.button(
     date_img.save(date_io, format="PNG")
     date_io.seek(0)
 
-    # 生成 Word 格式的体检签收凭证（内部自动关联体检报告文件名编号）
+    # 生成 Word 格式的体检签收凭证
     receipt_docx_buffer = generate_medical_receipt_docx(
         emp_name, emp_id, matched_filename, sig_io, date_io
     )
