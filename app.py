@@ -71,7 +71,7 @@ if not st.session_state.authenticated:
   st.markdown("---")
   st.markdown(
       "<div style='text-align: center; color: gray; font-size: 14px;'>"
-      "内部使用，严禁商业用途 | 开发者：陈野菲"
+      "本系统为内部合规平台，严禁商业用途 | 开发者：陈野菲"
       "</div>",
       unsafe_allow_html=True,
   )
@@ -445,7 +445,7 @@ if st.button(
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray; font-size: 14px;'>"
-    "内部使用，严禁商业用途 | 开发者：陈野菲"
+    "本系统为内部合规平台，严禁商业用途 | 开发者：陈野菲"
     "</div>",
     unsafe_allow_html=True,
 )
