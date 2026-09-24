@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+Pillow
+streamlit-drawable-canvas
+python-docx
+qrcode
+requests
+reportlab
+pypdf
