@@ -103,7 +103,7 @@ def upload_to_baidu_netdisk_with_auto_refresh(file_bytes, remote_filename):
     return False, f"网盘上传失败: {result.get('error_msg', '未知错误')}"
 
 
-# ================= 3. 侧边栏：Logo、微信分享与说明 =================
+# ================= 3. 侧边栏：Logo与微信分享 =================
 with st.sidebar:
   try:
     st.image("logo.png", width=160)
@@ -130,12 +130,6 @@ with st.sidebar:
     st.info(
         "💡 **提示**：将上方链接复制并发送至微信工作群，员工即可手机端完成体检报告签收。"
     )
-
-  st.markdown("---")
-  st.markdown("### 📂 管理员提示")
-  st.write(
-      "请将员工体检报告 **PDF 原件**放入 GitHub 仓库的 **体检报告/** 文件夹中。"
-  )
 
 # ================= 4. 主界面逻辑（Logo在左侧，主标题单独一行） =================
 col_logo, col_title = st.columns([1, 6])
