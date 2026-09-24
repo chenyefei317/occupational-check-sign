@@ -33,12 +33,55 @@ hide_streamlit_style = """
     """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+# ================= 2. 4位访问密码拦截验证 =================
+if "authenticated" not in st.session_state:
+  st.session_state.authenticated = False
 
-# 智能匹配员工专属 PDF 体检报告函数（支持通过 身份证号 + 姓名 精准匹配）
+if not st.session_state.authenticated:
+  col_l, col_t = st.columns([1, 6])
+  with col_l:
+    try:
+      st.image("logo.png", width=110)
+    except Exception:
+      st.image(
+          "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Ikea_logo.svg/800px-Ikea_logo.svg.png",
+          width=110,
+      )
+  with col_t:
+    st.markdown("## 员工职业健康体检报告在线查阅与签收平台")
+
+  st.markdown("---")
+  st.info("🔒 本系统为内部合规平台，请输入 **4位访问密码** 进入系统。")
+
+  with st.form("password_form"):
+    pwd_input = st.text_input(
+        "请输入 4 位访问密码：", type="password", max_chars=4
+    )
+    submit_pwd = st.form_submit_button("进入系统", use_container_width=True)
+
+  if submit_pwd:
+    # 默认密码为 8888，也可在 Streamlit Secrets 中配置 APP_PASSWORD
+    correct_pwd = st.secrets.get("APP_PASSWORD", "8888")
+    if pwd_input == correct_pwd:
+      st.session_state.authenticated = True
+      st.rerun()
+    else:
+      st.error("❌ 密码错误，请重新输入！")
+
+  st.markdown("---")
+  st.markdown(
+      "<div style='text-align: center; color: gray; font-size: 14px;'>"
+      "内部使用，严禁商业用途 | 开发者：陈野菲"
+      "</div>",
+      unsafe_allow_html=True,
+  )
+  st.stop()
+
+
+# 智能匹配员工专属 PDF 体检报告函数
 def find_employee_pdf_report(folder, id_card, name):
   if not os.path.exists(folder):
     return None, None
-  # 优先严格匹配：包含身份证和姓名
   for filename in os.listdir(folder):
     if (
         id_card in filename
@@ -46,14 +89,13 @@ def find_employee_pdf_report(folder, id_card, name):
         and filename.lower().endswith(".pdf")
     ):
       return os.path.join(folder, filename), filename
-  # 兜底匹配：仅匹配身份证
   for filename in os.listdir(folder):
     if id_card in filename and filename.lower().endswith(".pdf"):
       return os.path.join(folder, filename), filename
   return None, None
 
 
-# ================= 2. 百度网盘自动上传函数（带 OAuth2 自动刷新） =================
+# ================= 3. 百度网盘自动上传函数（带 OAuth2 自动刷新） =================
 def refresh_baidu_access_token():
   try:
     client_id = st.secrets.get("BAIDU_CLIENT_ID", "")
@@ -105,7 +147,7 @@ def upload_to_baidu_netdisk_with_auto_refresh(file_bytes, remote_filename):
     return False, f"网盘上传失败: {result.get('error_msg', '未知错误')}"
 
 
-# ================= 3. 侧边栏：Logo与微信分享 =================
+# ================= 4. 侧边栏：Logo与微信分享 =================
 with st.sidebar:
   try:
     st.image("logo.png", width=160)
@@ -118,7 +160,6 @@ with st.sidebar:
   st.markdown("### 📱 微信扫码与分享")
   st.write("已自动关联您的云端网址，二维码将实时更新供手机扫码填报。")
 
-  # 更新为正确的公网链接
   app_url = st.text_input(
       "应用公网链接 (URL)", value="https://occupational-check-sign.streamlit.app"
   )
@@ -134,7 +175,7 @@ with st.sidebar:
         "💡 **提示**：将上方链接复制并发送至微信工作群，员工即可手机端完成体检报告签收。"
     )
 
-# ================= 4. 主界面逻辑（Logo在左侧，主标题单独一行） =================
+# ================= 5. 主界面逻辑（Logo在左侧，主标题单独一行） =================
 col_logo, col_title = st.columns([1, 6])
 with col_logo:
   try:
@@ -152,7 +193,7 @@ st.markdown(
     " 体检报告。查阅完毕后，请在底部完成手写签名与手写日期。"
 )
 
-# 基础信息录入（双列：姓名、身份证号）
+# 基础信息录入
 st.subheader("1. 员工身份核验")
 col1, col2 = st.columns(2)
 with col1:
@@ -200,7 +241,7 @@ c_report = st.checkbox(
     "【须确认】本人已收到并查阅上述职业健康体检报告，已知悉体检结论及职业健康防护建议。"
 )
 
-# ================= 5. 手写签名与手写日期栏（并排双画布） =================
+# ================= 6. 手写签名与手写日期栏（并排双画布） =================
 current_date_str = datetime.date.today().strftime("%Y年%m月%d日")
 
 st.write("---")
@@ -237,7 +278,7 @@ with col_date:
   )
 
 
-# ================= 6. 辅助函数：生成 Word 格式的体检签收确认凭证（关联体检报告编号） =================
+# ================= 7. 辅助函数：生成 Word 格式的体检签收确认凭证 =================
 def generate_medical_receipt_docx(
     employee_name, employee_id, report_file_name, sig_image_io, date_image_io
 ):
@@ -250,7 +291,6 @@ def generate_medical_receipt_docx(
   run_t.bold = True
   run_t.font.element.rPr.rFonts.set(qn("w:eastAsia"), "华文宋体")
 
-  # 自动提取文件名（不含扩展名）作为体检报告档案编号/关联依据
   report_no_display = os.path.splitext(report_file_name)[0]
 
   p_info = doc.add_paragraph()
@@ -297,7 +337,7 @@ def generate_medical_receipt_docx(
   return buffer
 
 
-# ================= 7. 提交校验与生成档案 =================
+# ================= 8. 提交校验与生成档案 =================
 if st.button(
     "📁 确认无误，一键签收体检报告并生成合规档案", use_container_width=True
 ):
@@ -345,29 +385,23 @@ if st.button(
     date_img.save(date_io, format="PNG")
     date_io.seek(0)
 
-    # 生成 Word 格式的体检签收凭证
     receipt_docx_buffer = generate_medical_receipt_docx(
         emp_name, emp_id, matched_filename, sig_io, date_io
     )
 
-    # 动态打包 ZIP
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-      # 1. 放入员工原体检报告 PDF
       with open(matched_path, "rb") as fr:
         report_bytes = fr.read()
       zip_file.writestr(f"体检报告原件_{emp_name}_{matched_filename}", report_bytes)
 
-      # 2. 放入带签名的签收确认凭证 Word (.docx)
       receipt_filename = f"体检报告签收确认凭证_{emp_name}_{emp_id[-4:]}.docx"
       zip_file.writestr(receipt_filename, receipt_docx_buffer.getvalue())
 
-      # 3. 自动同步到百度网盘
       upload_to_baidu_netdisk_with_auto_refresh(
           receipt_docx_buffer.getvalue(), receipt_filename
       )
 
-      # 4. 保存签名及日期原图
       img_byte_arr = io.BytesIO()
       signature_img.save(img_byte_arr, format="PNG")
       zip_file.writestr(
@@ -405,14 +439,13 @@ if st.button(
           use_container_width=True,
       )
 
-    # 触发雪花特效
     st.snow()
 
-# ================= 8. 底部版权与开发者声明 =================
+# ================= 9. 底部版权与开发者声明 =================
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray; font-size: 14px;'>"
-    "内部使用，严禁商业用途 | 开发者：陈野菲 Yefei"
+    "内部使用，严禁商业用途 | 开发者：陈野菲"
     "</div>",
     unsafe_allow_html=True,
 )
